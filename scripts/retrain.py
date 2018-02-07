@@ -776,14 +776,14 @@ def add_final_training_ops(output_count, final_tensor_name, bottleneck_tensor,
             predictions = tf.matmul(bottleneck_input, layer_weights) + layer_biases
             tf.summary.histogram('predictions', predictions)
 
-        # y_pred = tf.layers.dense(bottleneck_input, units=1)
+        # predictions = tf.layers.dense(bottleneck_input, units=1, name="some_bullshit")
 
-    with tf.name_scope('MSE'):
+    with tf.name_scope('Train_MSE'):
         mean_squared_error = tf.losses.mean_squared_error(labels=ground_truth_input, predictions=predictions)
 
     tf.summary.scalar('MSE', mean_squared_error)
-    tf.summary.scalar('Ground_truth', tf.reshape(ground_truth_input,[]))
-    tf.summary.scalar('Prediction', tf.reshape(predictions,[]))
+    # tf.summary.scalar('Ground_truth', tf.reshape(ground_truth_input,[]))
+    # tf.summary.scalar('Prediction', tf.reshape(predictions,[]))
 
     with tf.name_scope('train'):
         optimizer = tf.train.GradientDescentOptimizer(FLAGS.learning_rate)
@@ -804,7 +804,7 @@ def add_evaluation_step(result_tensor, ground_truth_tensor):
     Returns:
       Tuple of (evaluation step, prediction).
     """
-    with tf.name_scope('loss'):
+    with tf.name_scope('evaulation_loss'):
         evaluation_step = tf.losses.mean_squared_error(labels=ground_truth_tensor, predictions=result_tensor)
     tf.summary.scalar('loss', evaluation_step)
     return evaluation_step, result_tensor
@@ -1012,6 +1012,19 @@ def main(_):
             num_regression_outputs, FLAGS.final_tensor_name, bottleneck_tensor,
             model_info['bottleneck_tensor_size'])
 
+        # # todo: bullshit
+        #
+        # x = tf.constant([[1], [2], [3], [4]], dtype=tf.float32)
+        # y_true = tf.constant([[0], [-1], [-2], [-3]], dtype=tf.float32)
+        #
+        # # Add the new layer that we'll be training.
+        # (train_step, mean_squared_error, bottleneck_input, ground_truth_input,
+        #  final_tensor) = add_final_training_ops(
+        #     num_regression_outputs, FLAGS.final_tensor_name, x,
+        #     1)
+        # # todo: end bullshit
+
+
         # Create the operations we need to evaluate the accuracy of our new layer.
         evaluation_step, prediction = add_evaluation_step(
             final_tensor, ground_truth_input)
@@ -1048,6 +1061,11 @@ def main(_):
             # Feed the bottlenecks and ground truth into the graph, and run a training
             # step. Capture training summaries for TensorBoard with the `merged` op.
 
+            # # todo: bs
+            # train_bottlenecks = [[1], [2], [3], [4]]
+            # train_ground_truth = [[0], [-1], [-2], [-3]]
+            # # todo: end
+
             train_summary, _ = sess.run(
                 [merged, train_step],
                 feed_dict={bottleneck_input: train_bottlenecks,
@@ -1063,23 +1081,23 @@ def main(_):
                                ground_truth_input: train_ground_truth})
                 tf.logging.info('%s: Step %d: Train MSE = %.6f' %
                                 (datetime.now(), i, train_mse))
-                #
-                # validation_bottlenecks, validation_ground_truth, _ = (
-                #     get_random_cached_bottlenecks(
-                #         sess, image_lists, FLAGS.validation_batch_size, 'validation',
-                #         FLAGS.bottleneck_dir, FLAGS.image_dir, jpeg_data_tensor,
-                #         decoded_image_tensor, resized_image_tensor, bottleneck_tensor,
-                #         FLAGS.architecture))
-                # # Run a validation step and capture training summaries for TensorBoard
-                # # with the `merged` op.
-                # validation_summary, validation_mse = sess.run(
-                #     [merged, evaluation_step],
-                #     feed_dict={bottleneck_input: validation_bottlenecks,
-                #                ground_truth_input: validation_ground_truth})
-                # validation_writer.add_summary(validation_summary, i)
-                # tf.logging.info('%s: Step %d: Validation MSE = %.6f (N=%d)' %
-                #                 (datetime.now(), i, validation_mse,
-                #                  len(validation_bottlenecks)))
+
+                validation_bottlenecks, validation_ground_truth, _ = (
+                    get_random_cached_bottlenecks(
+                        sess, image_lists, FLAGS.validation_batch_size, 'validation',
+                        FLAGS.bottleneck_dir, FLAGS.image_dir, jpeg_data_tensor,
+                        decoded_image_tensor, resized_image_tensor, bottleneck_tensor,
+                        FLAGS.architecture))
+                # Run a validation step and capture training summaries for TensorBoard
+                # with the `merged` op.
+                validation_summary, validation_mse = sess.run(
+                    [merged, evaluation_step],
+                    feed_dict={bottleneck_input: validation_bottlenecks,
+                               ground_truth_input: validation_ground_truth})
+                validation_writer.add_summary(validation_summary, i)
+                tf.logging.info('%s: Step %d: Validation MSE = %.6f (N=%d)' %
+                                (datetime.now(), i, validation_mse,
+                                 len(validation_bottlenecks)))
 
             # Store intermediate results
             intermediate_frequency = FLAGS.intermediate_store_frequency
@@ -1104,8 +1122,8 @@ def main(_):
             [evaluation_step, prediction],
             feed_dict={bottleneck_input: test_bottlenecks,
                        ground_truth_input: test_ground_truth})
-        tf.logging.info('Final test accuracy = %.1f%% (N=%d)' %
-                        (test_accuracy * 100, len(test_bottlenecks)))
+        tf.logging.info('Final test MSE = %.6f (N=%d)' %
+                        (test_accuracy, len(test_bottlenecks)))
 
         # if FLAGS.print_misclassified_test_images:
         #     tf.logging.info('=== MISCLASSIFIED TEST IMAGES ===')
@@ -1118,8 +1136,8 @@ def main(_):
         # Write out the trained graph and labels with the weights stored as
         # constants.
         save_graph_to_file(sess, graph, FLAGS.output_graph)
-        with gfile.FastGFile(FLAGS.output_labels, 'w') as f:
-            f.write('\n'.join(image_lists.keys()) + '\n')
+        # with gfile.FastGFile(FLAGS.output_labels, 'w') as f:
+        #     f.write('\n'.join(image_lists.keys()) + '\n')
 
 
 if __name__ == '__main__':
