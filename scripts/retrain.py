@@ -761,35 +761,40 @@ def add_final_training_ops(output_count, final_tensor_name, bottleneck_tensor,
     # Organizing the following ops as `final_training_ops` so they're easier
     # to see in TensorBoard
     layer_name = 'final_training_ops'
-    with tf.name_scope(layer_name):
-        with tf.name_scope('weights'):
-            initial_value = tf.truncated_normal(
-                [bottleneck_tensor_size, output_count], stddev=0.001)
+    #     with tf.name_scope('weights'):
+    #         initial_value = tf.truncated_normal(
+    #             [bottleneck_tensor_size, output_count], stddev=0.001)
+    #
+    #         layer_weights = tf.Variable(initial_value, name='final_weights')
+    #
+    #         variable_summaries(layer_weights)
+    #     with tf.name_scope('biases'):
+    #         layer_biases = tf.Variable(tf.zeros([output_count]), name='final_biases')
+    #         variable_summaries(layer_biases)
+    #     with tf.name_scope('Wx_plus_b'):
+    #         predictions = tf.matmul(bottleneck_input, layer_weights) + layer_biases
+    #         tf.summary.histogram('predictions', predictions)
 
-            layer_weights = tf.Variable(initial_value, name='final_weights')
+    fc1 = tf.layers.dense(bottleneck_input, units=200, activation=tf.nn.relu, name="fc_1")
+    fc2 = tf.layers.dense(fc1, units=100, activation=tf.nn.relu, name="fc_2")
+    predictions = tf.layers.dense(fc2, units=1, name="predictions")
 
-            variable_summaries(layer_weights)
-        with tf.name_scope('biases'):
-            layer_biases = tf.Variable(tf.zeros([output_count]), name='final_biases')
-            variable_summaries(layer_biases)
-        with tf.name_scope('Wx_plus_b'):
-            predictions = tf.matmul(bottleneck_input, layer_weights) + layer_biases
-            tf.summary.histogram('predictions', predictions)
 
-        # predictions = tf.layers.dense(bottleneck_input, units=1, name="some_bullshit")
 
-    with tf.name_scope('Train_MSE'):
-        mean_squared_error = tf.losses.mean_squared_error(labels=ground_truth_input, predictions=predictions)
+    final_output = tf.placeholder_with_default(predictions, predictions.shape, name=final_tensor_name)
 
-    tf.summary.scalar('MSE', mean_squared_error)
+    with tf.name_scope('RMSE'):
+        root_mean_squared_error = tf.sqrt(tf.losses.mean_squared_error(labels=ground_truth_input, predictions=predictions))
+
+    tf.summary.scalar('RMSE', root_mean_squared_error)
     # tf.summary.scalar('Ground_truth', tf.reshape(ground_truth_input,[]))
     # tf.summary.scalar('Prediction', tf.reshape(predictions,[]))
 
     with tf.name_scope('train'):
         optimizer = tf.train.GradientDescentOptimizer(FLAGS.learning_rate)
-        train_step = optimizer.minimize(mean_squared_error)
+        train_step = optimizer.minimize(root_mean_squared_error)
 
-    return (train_step, mean_squared_error, bottleneck_input, ground_truth_input,
+    return (train_step, root_mean_squared_error, bottleneck_input, ground_truth_input,
             predictions)
 
 
@@ -805,12 +810,13 @@ def add_evaluation_step(result_tensor, ground_truth_tensor):
       Tuple of (evaluation step, prediction).
     """
     with tf.name_scope('evaulation_loss'):
-        evaluation_step = tf.losses.mean_squared_error(labels=ground_truth_tensor, predictions=result_tensor)
+        evaluation_step = tf.sqrt(tf.losses.mean_squared_error(labels=ground_truth_tensor, predictions=result_tensor))
     tf.summary.scalar('loss', evaluation_step)
     return evaluation_step, result_tensor
 
 
 def save_graph_to_file(sess, graph, graph_file_name):
+    tf.logging.info("Saving graph to %s", graph_file_name)
     output_graph_def = graph_util.convert_variables_to_constants(
         sess, graph.as_graph_def(), [FLAGS.final_tensor_name])
     with gfile.FastGFile(graph_file_name, 'wb') as f:
